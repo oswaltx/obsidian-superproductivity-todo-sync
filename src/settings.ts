@@ -20,7 +20,7 @@ export class SPSettingTab extends PluginSettingTab {
 				})
 			);
 
-		containerEl.createEl("h3", { text: "Connection" });
+		new Setting(containerEl).setName("Connection").setHeading();
 
 		new Setting(containerEl)
 			.setName("Base URL")
@@ -65,7 +65,7 @@ export class SPSettingTab extends PluginSettingTab {
 			);
 		testStatusEl = containerEl.createEl("p", { cls: "sp-wizard-status" });
 
-		containerEl.createEl("h3", { text: "View" });
+		new Setting(containerEl).setName("View").setHeading();
 
 		new Setting(containerEl)
 			.setName("Auto-refresh interval (seconds)")
@@ -82,7 +82,7 @@ export class SPSettingTab extends PluginSettingTab {
 					})
 			);
 
-		containerEl.createEl("h4", { text: "Priority sort order" });
+		new Setting(containerEl).setName("Priority sort order").setHeading();
 		containerEl.createEl("p", {
 			cls: "setting-item-description",
 			text: "Tasks are sorted within the same day by the position of their first matching tag below — top sorts first. Tasks with none of these tags sort last. Tags must already exist in SuperProductivity; add as many as you like.",

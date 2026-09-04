@@ -1,7 +1,8 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import type SuperProductivitySyncPlugin from "./main";
 import type { SPProject, SPTag, SPTask } from "./types";
 import { DATE_KEYWORDS, dateLabel, parseInput, prioRank } from "./parse";
+import { getErrorMessage } from "./util";
 
 export const VIEW_TYPE_SP = "superproductivity-todo-sync-view";
 
@@ -72,9 +73,11 @@ export class SPView extends ItemView {
 			text: "SuperProductivity is not set up yet.",
 		});
 		const btn = root.createEl("button", { text: "Open setup wizard", cls: "mod-cta" });
-		btn.addEventListener("click", async () => {
-			const { SPSetupWizardModal } = await import("./wizard");
-			new SPSetupWizardModal(this.app, this.plugin).open();
+		btn.addEventListener("click", () => {
+			void (async () => {
+				const { SPSetupWizardModal } = await import("./wizard");
+				new SPSetupWizardModal(this.app, this.plugin).open();
+			})();
 		});
 	}
 
@@ -110,9 +113,11 @@ export class SPView extends ItemView {
 
 		this.groupsContainer = root.createDiv({ cls: "sp-groups" });
 
-		this.addBtn.addEventListener("click", () => this.doAdd());
+		this.addBtn.addEventListener("click", () => {
+			void this.doAdd();
+		});
 		this.input.addEventListener("input", () => this.updateSuggestions());
-		this.input.addEventListener("blur", () => setTimeout(() => this.hideDropdown(), 150));
+		this.input.addEventListener("blur", () => window.setTimeout(() => this.hideDropdown(), 150));
 		this.input.addEventListener("keydown", (e) => this.onInputKeydown(e));
 	}
 
@@ -131,7 +136,7 @@ export class SPView extends ItemView {
 			this.statusEl.removeClass("sp-status-error");
 			this.renderGroups();
 		} catch (e) {
-			this.statusEl.setText("SuperProductivity is unreachable: " + (e as Error).message);
+			this.statusEl.setText("SuperProductivity is unreachable: " + getErrorMessage(e));
 			this.statusEl.addClass("sp-status-error");
 			if (!this.loaded) this.groupsContainer.empty();
 		}
@@ -223,7 +228,7 @@ export class SPView extends ItemView {
 				return;
 			}
 		}
-		if (e.key === "Enter") this.doAdd();
+		if (e.key === "Enter") void this.doAdd();
 	}
 
 	private async doAdd(): Promise<void> {
@@ -250,7 +255,7 @@ export class SPView extends ItemView {
 			this.statusEl.removeClass("sp-status-error");
 			this.renderGroups();
 		} catch (e) {
-			this.statusEl.setText("Error: " + (e as Error).message);
+			this.statusEl.setText("Error: " + getErrorMessage(e));
 			this.statusEl.addClass("sp-status-error");
 		} finally {
 			this.addBtn.disabled = false;
@@ -260,7 +265,7 @@ export class SPView extends ItemView {
 	// ---- rendering ---------------------------------------------------------
 
 	private badge(parent: HTMLElement, text: string): void {
-		parent.createEl("span", { cls: "sp-badge", text });
+		parent.createSpan({ cls: "sp-badge", text });
 	}
 
 	private renderTaskRow(container: HTMLElement, t: SPTask, showDate: boolean): void {
@@ -272,13 +277,13 @@ export class SPView extends ItemView {
 			this.priorityTagEntries.map((e) => e.id)
 		);
 		if (rank < this.priorityTagEntries.length) {
-			row.createEl("span", {
+			row.createSpan({
 				cls: "sp-prio-badge",
 				text: String(rank + 1),
 				attr: { title: this.priorityTagEntries[rank].title },
 			});
 		}
-		row.createEl("span", { cls: "sp-task-title", text: t.title });
+		row.createSpan({ cls: "sp-task-title", text: t.title });
 
 		const meta = row.createDiv({ cls: "sp-task-meta" });
 		const dl = showDate ? dateLabel(t) : null;
@@ -296,24 +301,28 @@ export class SPView extends ItemView {
 				const file =
 					this.app.vault.getAbstractFileByPath(notePath + ".md") ||
 					this.app.vault.getAbstractFileByPath(notePath);
-				if (file && "path" in file) this.app.workspace.getLeaf(false).openFile(file as any);
+				if (file instanceof TFile) void this.app.workspace.getLeaf(false).openFile(file);
 				else new Notice("Note not found: " + notePath);
 			});
 		}
 
-		checkbox.addEventListener("change", async () => {
-			checkbox.disabled = true;
-			try {
-				await this.plugin.api.patchTask(t.id, { isDone: true });
-				t.isDone = true;
-				this.renderGroups();
-			} catch (e) {
-				checkbox.disabled = false;
-				checkbox.checked = false;
-				this.statusEl.setText("Error: " + (e as Error).message);
-				this.statusEl.addClass("sp-status-error");
-			}
+		checkbox.addEventListener("change", () => {
+			void this.completeTask(t, checkbox);
 		});
+	}
+
+	private async completeTask(t: SPTask, checkbox: HTMLInputElement): Promise<void> {
+		checkbox.disabled = true;
+		try {
+			await this.plugin.api.patchTask(t.id, { isDone: true });
+			t.isDone = true;
+			this.renderGroups();
+		} catch (e) {
+			checkbox.disabled = false;
+			checkbox.checked = false;
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+		}
 	}
 
 	private tagIdFor(title: string): string | undefined {
@@ -366,26 +375,12 @@ export class SPView extends ItemView {
 
 	private renderGroup(label: string, list: SPTask[], showDate: boolean, allowReschedule: boolean, todayStr: string): void {
 		const titleEl = this.groupsContainer.createDiv({ cls: "sp-group-title" });
-		titleEl.createEl("span", { text: `${label} (${list.length})` });
+		titleEl.createSpan({ text: `${label} (${list.length})` });
 
 		if (allowReschedule && list.length > 0) {
 			const rescheduleBtn = titleEl.createEl("button", { text: "→ all to today", cls: "sp-reschedule-btn" });
-			rescheduleBtn.addEventListener("click", async () => {
-				rescheduleBtn.disabled = true;
-				try {
-					await Promise.all(
-						list.map((t) =>
-							this.plugin.api.patchTask(t.id, { dueDay: todayStr }).then(() => {
-								t.dueDay = todayStr;
-							})
-						)
-					);
-					this.renderGroups();
-				} catch (e) {
-					this.statusEl.setText("Error: " + (e as Error).message);
-					this.statusEl.addClass("sp-status-error");
-					rescheduleBtn.disabled = false;
-				}
+			rescheduleBtn.addEventListener("click", () => {
+				void this.rescheduleToToday(list, todayStr, rescheduleBtn);
 			});
 		}
 
@@ -394,5 +389,23 @@ export class SPView extends ItemView {
 			return;
 		}
 		for (const t of list) this.renderTaskRow(this.groupsContainer, t, showDate);
+	}
+
+	private async rescheduleToToday(list: SPTask[], todayStr: string, rescheduleBtn: HTMLButtonElement): Promise<void> {
+		rescheduleBtn.disabled = true;
+		try {
+			await Promise.all(
+				list.map((t) =>
+					this.plugin.api.patchTask(t.id, { dueDay: todayStr }).then(() => {
+						t.dueDay = todayStr;
+					})
+				)
+			);
+			this.renderGroups();
+		} catch (e) {
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+			rescheduleBtn.disabled = false;
+		}
 	}
 }

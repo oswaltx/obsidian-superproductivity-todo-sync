@@ -1,8 +1,8 @@
-import { Modal, Setting } from "obsidian";
+import { App, Modal, Setting } from "obsidian";
 import type SuperProductivitySyncPlugin from "./main";
 
 export class SPSetupWizardModal extends Modal {
-	constructor(app: any, private plugin: SuperProductivitySyncPlugin) {
+	constructor(app: App, private plugin: SuperProductivitySyncPlugin) {
 		super(app);
 	}
 
@@ -51,27 +51,35 @@ export class SPSetupWizardModal extends Modal {
 		const btnRow = contentEl.createDiv({ cls: "sp-wizard-buttons" });
 
 		const testBtn = btnRow.createEl("button", { text: "Test connection" });
-		testBtn.addEventListener("click", async () => {
-			testBtn.disabled = true;
-			statusEl.removeClass("sp-status-ok", "sp-status-error");
-			statusEl.setText("Testing connection …");
-			await this.plugin.saveSettings();
-			const result = await this.plugin.api.testConnection();
-			statusEl.setText((result.ok ? "✅ " : "❌ ") + result.message);
-			statusEl.addClass(result.ok ? "sp-status-ok" : "sp-status-error");
-			testBtn.disabled = false;
+		testBtn.addEventListener("click", () => {
+			void this.testConnection(testBtn, statusEl);
 		});
 
 		const doneBtn = btnRow.createEl("button", { text: "Done", cls: "mod-cta" });
-		doneBtn.addEventListener("click", async () => {
-			this.plugin.settings.setupCompleted = true;
-			await this.plugin.saveSettings();
-			this.close();
-			await this.plugin.activateView();
+		doneBtn.addEventListener("click", () => {
+			void this.finishSetup();
 		});
 	}
 
 	onClose(): void {
 		this.contentEl.empty();
+	}
+
+	private async testConnection(testBtn: HTMLButtonElement, statusEl: HTMLElement): Promise<void> {
+		testBtn.disabled = true;
+		statusEl.removeClass("sp-status-ok", "sp-status-error");
+		statusEl.setText("Testing connection …");
+		await this.plugin.saveSettings();
+		const result = await this.plugin.api.testConnection();
+		statusEl.setText((result.ok ? "✅ " : "❌ ") + result.message);
+		statusEl.addClass(result.ok ? "sp-status-ok" : "sp-status-error");
+		testBtn.disabled = false;
+	}
+
+	private async finishSetup(): Promise<void> {
+		this.plugin.settings.setupCompleted = true;
+		await this.plugin.saveSettings();
+		this.close();
+		await this.plugin.activateView();
 	}
 }

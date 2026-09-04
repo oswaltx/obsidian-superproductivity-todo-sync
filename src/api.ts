@@ -1,13 +1,12 @@
-import * as http from "http";
-import * as https from "https";
 import type { SPProject, SPTag, SPTask } from "./types";
 
 /**
  * SuperProductivity's local REST server 403s any request that carries an
  * Origin header ("Requests from web origins are not allowed") — fetch()/XHR
- * always attach one from a renderer context, which blocks it outright. Node's
- * http/https modules never add one, and a desktop Obsidian plugin has full
- * Node access, so we talk to SP through them directly instead of fetch().
+ * always attach one from a renderer context, which blocks it outright.
+ * Obsidian's requestUrl() goes through Electron's net stack instead of the
+ * renderer's fetch(), so it never attaches one either — that's the whole
+ * reason the API exists, to let plugins reach servers like this one.
  */
 export class SPApiError extends Error {}
 
@@ -16,13 +15,46 @@ export interface SPConnectionConfig {
 	token: string;
 }
 
-interface RawResponse {
+export interface RawResponse {
 	status: number;
-	body: string;
+	text: string;
+}
+
+/** Low-level request function, swappable so tests can run outside the Obsidian runtime. */
+export type RequestFn = (opts: {
+	url: string;
+	method: string;
+	headers: Record<string, string>;
+	body?: string;
+}) => Promise<RawResponse>;
+
+export const defaultRequestFn: RequestFn = async (opts) => {
+	const { requestUrl } = await import("obsidian");
+	const res = await requestUrl({
+		url: opts.url,
+		method: opts.method,
+		headers: opts.headers,
+		body: opts.body,
+		throw: false,
+	});
+	return { status: res.status, text: res.text };
+};
+
+interface SPEnvelope {
+	ok: boolean;
+	data?: unknown;
+	error?: { message?: string };
+}
+
+function isSPEnvelope(value: unknown): value is SPEnvelope {
+	return typeof value === "object" && value !== null && "ok" in value;
 }
 
 export class SuperProductivityClient {
-	constructor(private getConfig: () => SPConnectionConfig) {}
+	constructor(
+		private getConfig: () => SPConnectionConfig,
+		private requestFn: RequestFn = defaultRequestFn
+	) {}
 
 	private request(method: string, path: string, body?: unknown): Promise<RawResponse> {
 		const { baseUrl, token } = this.getConfig();
@@ -32,41 +64,18 @@ export class SuperProductivityClient {
 		} catch {
 			return Promise.reject(new SPApiError(`Invalid base URL: "${baseUrl}".`));
 		}
-		const transport = base.protocol === "https:" ? https : http;
-		const data = body !== undefined ? JSON.stringify(body) : null;
+		const data = body !== undefined ? JSON.stringify(body) : undefined;
 		const headers: Record<string, string> = {};
 		if (token) headers["Authorization"] = `Bearer ${token}`;
-		if (data) {
-			headers["Content-Type"] = "application/json";
-			headers["Content-Length"] = String(Buffer.byteLength(data));
-		}
+		if (data) headers["Content-Type"] = "application/json";
 		const fullPath = base.pathname.replace(/\/$/, "") + path;
 
-		return new Promise((resolve, reject) => {
-			const req = transport.request(
-				{
-					hostname: base.hostname,
-					port: base.port ? Number(base.port) : base.protocol === "https:" ? 443 : 80,
-					path: fullPath,
-					method,
-					headers,
-				},
-				(res) => {
-					let out = "";
-					res.setEncoding("utf-8");
-					res.on("data", (chunk) => (out += chunk));
-					res.on("end", () => resolve({ status: res.statusCode ?? 0, body: out }));
-				}
+		return this.requestFn({ url: base.origin + fullPath, method, headers, body: data }).catch((err: unknown) => {
+			throw new SPApiError(
+				`SuperProductivity is not reachable at ${baseUrl} (is the app running with the local REST API enabled?). ${
+					err instanceof Error ? err.message : String(err)
+				}`
 			);
-			req.on("error", (err) =>
-				reject(
-					new SPApiError(
-						`SuperProductivity is not reachable at ${baseUrl} (is the app running with the local REST API enabled?). ${err.message}`
-					)
-				)
-			);
-			if (data) req.write(data);
-			req.end();
 		});
 	}
 
@@ -76,16 +85,17 @@ export class SuperProductivityClient {
 			throw new SPApiError("No API token configured. Open the setup wizard in the plugin settings.");
 		}
 		const res = await this.request(method, path, body);
-		let json: any;
+		let parsed: unknown;
 		try {
-			json = res.body ? JSON.parse(res.body) : null;
+			parsed = res.text ? JSON.parse(res.text) : null;
 		} catch {
 			throw new SPApiError(`Unexpected response from SuperProductivity (status ${res.status}).`);
 		}
-		if (!json || json.ok !== true) {
-			throw new SPApiError(json?.error?.message || `Request failed (status ${res.status}).`);
+		if (!isSPEnvelope(parsed) || parsed.ok !== true) {
+			const message = isSPEnvelope(parsed) ? parsed.error?.message : undefined;
+			throw new SPApiError(message || `Request failed (status ${res.status}).`);
 		}
-		return json.data as T;
+		return parsed.data as T;
 	}
 
 	getProjects(): Promise<SPProject[]> {
@@ -132,7 +142,7 @@ export class SuperProductivityClient {
 			const projects = await this.getProjects();
 			return { ok: true, message: `Connection successful (${projects.length} project(s) found).` };
 		} catch (e) {
-			return { ok: false, message: (e as Error).message };
+			return { ok: false, message: e instanceof Error ? e.message : String(e) };
 		}
 	}
 }

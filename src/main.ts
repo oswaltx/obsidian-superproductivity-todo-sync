@@ -20,13 +20,15 @@ export default class SuperProductivitySyncPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_SP, (leaf) => new SPView(leaf, this));
 
 		this.addRibbonIcon("check-circle-2", "SuperProductivity Todo Sync", () => {
-			this.activateView();
+			void this.activateView();
 		});
 
 		this.addCommand({
 			id: "open-superproductivity-view",
 			name: "Open SuperProductivity task view",
-			callback: () => this.activateView(),
+			callback: () => {
+				void this.activateView();
+			},
 		});
 
 		this.addCommand({
@@ -77,7 +79,7 @@ export default class SuperProductivitySyncPlugin extends Plugin {
 			leaf = workspace.getRightLeaf(false);
 			await leaf?.setViewState({ type: VIEW_TYPE_SP, active: true });
 		}
-		if (leaf) workspace.revealLeaf(leaf);
+		if (leaf) void workspace.revealLeaf(leaf);
 	}
 
 	onunload(): void {

@@ -1,7 +1,7 @@
 {
   "name": "superproductivity-todo-sync",
-  "version": "0.2.0",
-  "description": "View and edit your SuperProductivity tasks inside Obsidian via SuperProductivity's local REST API.",
+  "version": "0.2.1",
+  "description": "View and edit your SuperProductivity tasks via SuperProductivity's local REST API.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -14,7 +14,6 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.14.2",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.21.5",
     "obsidian": "latest",
     "tslib": "2.6.2",

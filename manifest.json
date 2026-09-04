@@ -1,9 +1,9 @@
 {
   "id": "superproductivity-todo-sync",
   "name": "SuperProductivity Todo Sync",
-  "version": "0.2.0",
-  "minAppVersion": "1.4.16",
-  "description": "View and edit your SuperProductivity tasks inside Obsidian via SuperProductivity's local REST API.",
+  "version": "0.2.1",
+  "minAppVersion": "1.13.0",
+  "description": "View and edit your SuperProductivity tasks via SuperProductivity's local REST API.",
   "author": "oswaltx",
   "authorUrl": "https://github.com/oswaltx",
   "fundingUrl": "https://buymeacoffee.com/oswalt",

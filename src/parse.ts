@@ -70,7 +70,7 @@ export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): 
 	let projectId: string | null = null;
 	let timeEstimate: number | null = null;
 
-	title = title.replace(/@([A-Za-z]+)/g, (full, word) => {
+	title = title.replace(/@([A-Za-z]+)/g, (full: string, word: string) => {
 		const resolved = resolveDateKeyword(word.toLowerCase());
 		if (resolved) {
 			dueDay = toISO(resolved);
@@ -78,7 +78,7 @@ export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): 
 		}
 		return full;
 	});
-	title = title.replace(/#(\S+)/g, (full, word) => {
+	title = title.replace(/#(\S+)/g, (full: string, word: string) => {
 		const match = tags.find((t) => t.title.toLowerCase() === word.toLowerCase());
 		if (match) {
 			tagIds.push(match.id);
@@ -86,7 +86,7 @@ export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): 
 		}
 		return full;
 	});
-	title = title.replace(/\+(\S+)/g, (full, word) => {
+	title = title.replace(/\+(\S+)/g, (full: string, word: string) => {
 		const match = projects.find((p) => p.title.toLowerCase() === word.toLowerCase());
 		if (match) {
 			projectId = match.id;

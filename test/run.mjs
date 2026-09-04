@@ -17,6 +17,7 @@ for (const entry of entries) {
 		bundle: true,
 		platform: "node",
 		format: "cjs",
+		external: ["obsidian"],
 		outfile,
 	});
 	console.log(`\n--- running ${entry} ---`);

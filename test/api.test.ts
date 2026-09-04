@@ -1,5 +1,30 @@
 import * as http from "http";
-import { SuperProductivityClient } from "../src/api";
+import { SuperProductivityClient, type RequestFn } from "../src/api";
+
+/**
+ * api.ts's production path uses Obsidian's requestUrl(), which only exists
+ * inside the real Obsidian app. This is a Node-http equivalent so the test
+ * suite can exercise SuperProductivityClient's logic (envelope parsing,
+ * error handling, auth) standalone, injected via its RequestFn parameter.
+ */
+const nodeHttpRequestFn: RequestFn = (opts) =>
+	new Promise((resolve, reject) => {
+		const url = new URL(opts.url);
+		const headers = { ...opts.headers };
+		if (opts.body) headers["Content-Length"] = String(Buffer.byteLength(opts.body));
+		const req = http.request(
+			{ hostname: url.hostname, port: url.port, path: url.pathname + url.search, method: opts.method, headers },
+			(res) => {
+				let out = "";
+				res.setEncoding("utf-8");
+				res.on("data", (chunk: string) => (out += chunk));
+				res.on("end", () => resolve({ status: res.statusCode ?? 0, text: out }));
+			}
+		);
+		req.on("error", reject);
+		if (opts.body) req.write(opts.body);
+		req.end();
+	});
 
 let failures = 0;
 function assertEq(actual: unknown, expected: unknown, label: string) {
@@ -100,7 +125,7 @@ async function main() {
 	const port = (server.address() as any).port;
 	const baseUrl = `http://127.0.0.1:${port}`;
 
-	const client = new SuperProductivityClient(() => ({ baseUrl, token: VALID_TOKEN }));
+	const client = new SuperProductivityClient(() => ({ baseUrl, token: VALID_TOKEN }), nodeHttpRequestFn);
 
 	const projects = await client.getProjects();
 	assertEq(projects, PROJECTS, "getProjects returns server data");
@@ -120,13 +145,16 @@ async function main() {
 	const testResult = await client.testConnection();
 	assertEq(testResult.ok, true, "testConnection succeeds via /health");
 
-	const badClient = new SuperProductivityClient(() => ({ baseUrl, token: "wrong-token" }));
+	const badClient = new SuperProductivityClient(() => ({ baseUrl, token: "wrong-token" }), nodeHttpRequestFn);
 	await assertRejects(badClient.getProjects(), "getProjects with wrong token rejects", "Invalid token");
 
-	const noTokenClient = new SuperProductivityClient(() => ({ baseUrl, token: "" }));
+	const noTokenClient = new SuperProductivityClient(() => ({ baseUrl, token: "" }), nodeHttpRequestFn);
 	await assertRejects(noTokenClient.getProjects(), "getProjects with no token rejects locally", "No API token configured");
 
-	const unreachableClient = new SuperProductivityClient(() => ({ baseUrl: "http://127.0.0.1:1", token: VALID_TOKEN }));
+	const unreachableClient = new SuperProductivityClient(
+		() => ({ baseUrl: "http://127.0.0.1:1", token: VALID_TOKEN }),
+		nodeHttpRequestFn
+	);
 	await assertRejects(unreachableClient.getProjects(), "getProjects against unreachable host rejects", "not reachable".slice(0, 0) || undefined);
 
 	assertEq(sawOriginHeader, false, "no request ever carried an Origin header (Node http client doesn't send one)");
