@@ -29,7 +29,14 @@ export type RequestFn = (opts: {
 }) => Promise<RawResponse>;
 
 export const defaultRequestFn: RequestFn = async (opts) => {
-	const { requestUrl } = await import("obsidian");
+	// Lazy, synchronous require() rather than a top-level or dynamic import():
+	// the "obsidian" package ships types only (no runtime file), so a
+	// top-level import breaks the Node-based test bundle, and a dynamic
+	// import() fails inside Obsidian's own CJS plugin sandbox at runtime
+	// ("Failed to resolve module specifier 'obsidian'"). require() is what
+	// Obsidian's loader actually supports here — matches how every other
+	// static `import ... from "obsidian"` in this plugin already compiles.
+	const { requestUrl } = require("obsidian") as typeof import("obsidian");
 	const res = await requestUrl({
 		url: opts.url,
 		method: opts.method,
