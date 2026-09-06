@@ -11,13 +11,21 @@ cloud account, no third-party server.
 - A sidebar view listing your open SuperProductivity tasks, grouped into
   **Overdue**, **Due today**, **This week**, **No date**, and **Waiting**
   (tasks carrying a configurable "waiting" tag).
+- **Project tabs** above the list ("All" plus one per SuperProductivity
+  project) to filter the whole view down to a single project.
 - Quick-add input with the same `@`/`#`/`+` shortcut syntax as
   SuperProductivity's own add-task bar, with autocomplete:
   - `@today`, `@tomorrow`, a weekday name, or `@nextweek` for the due date
   - `#tag` for an existing tag
   - `+project` for an existing project
   - `30m` / `2h` for a time estimate
+- A **"Quick add task" command** (Command palette → assign your own hotkey
+  under Settings → Hotkeys) opens the same quick-add input in a small modal,
+  so you can log a task without switching to the sidebar.
 - Checkboxes to mark tasks done, patched straight back to SuperProductivity.
+- Click a task's title to rename it in place.
+- A trash icon to delete a task (asks for confirmation first — SuperProductivity
+  has no undo for this via the REST API).
 - One-click "→ all to today" to reschedule every overdue task at once.
 - If a task's notes contain an `obsidian://open?...&file=<path>` link, a small
   icon opens that note directly inside Obsidian.
@@ -30,8 +38,8 @@ cloud account, no third-party server.
   **Settings → Misc → Enable local REST API**. SuperProductivity will then
   show you the base URL (e.g. `http://127.0.0.1:3876` — the port is not
   fixed) and an API token.
-- Desktop Obsidian only (the plugin talks to `127.0.0.1` over Node's `http`
-  module, which isn't available on mobile).
+- Desktop Obsidian only (the plugin talks to `127.0.0.1`, which isn't
+  reachable from Obsidian Mobile).
 
 ## Setup
 
@@ -82,8 +90,9 @@ is running — but it's still worth being deliberate about where it ends up.
 SuperProductivity's local REST server rejects any request carrying an
 `Origin` header (403, "Requests from web origins are not allowed"), which
 `fetch()`/`XMLHttpRequest` always attach from a renderer context. This plugin
-talks to the API through Node's `http`/`https` modules directly instead,
-which never send an `Origin` header.
+talks to the API through Obsidian's own `requestUrl()` instead, which goes
+through Electron's networking stack rather than the renderer's fetch(), so
+it never sends an `Origin` header either.
 
 ## Manual installation
 

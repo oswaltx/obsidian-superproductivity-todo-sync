@@ -1,16 +1,11 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, TFile, WorkspaceLeaf } from "obsidian";
 import type SuperProductivitySyncPlugin from "./main";
 import type { SPProject, SPTag, SPTask } from "./types";
-import { DATE_KEYWORDS, dateLabel, parseInput, prioRank } from "./parse";
+import { dateLabel, prioRank, type ParsedInput } from "./parse";
+import { QuickAddInput } from "./quickadd";
 import { getErrorMessage } from "./util";
 
 export const VIEW_TYPE_SP = "superproductivity-todo-sync-view";
-
-interface TokenMatch {
-	trigger: "@" | "#" | "+";
-	partial: string;
-	start: number;
-}
 
 export class SPView extends ItemView {
 	private plugin: SuperProductivitySyncPlugin;
@@ -24,12 +19,7 @@ export class SPView extends ItemView {
 
 	private groupsContainer!: HTMLElement;
 	private statusEl!: HTMLElement;
-	private input!: HTMLInputElement;
-	private addBtn!: HTMLButtonElement;
-	private dropdown!: HTMLElement;
-	private suggestions: string[] = [];
-	private selIdx = 0;
-	private tokenStart = -1;
+	private quickAdd!: QuickAddInput;
 	private priorityTagEntries: { id: string; title: string }[] = [];
 	private selectedProjectId: string | null = null;
 	private tabsContainer!: HTMLElement;
@@ -101,27 +91,21 @@ export class SPView extends ItemView {
 	}
 
 	private buildChrome(root: HTMLElement): void {
-		const addRow = root.createDiv({ cls: "sp-add-row" });
-		this.input = addRow.createEl("input", {
-			type: "text",
-			cls: "sp-add-input",
-			attr: { placeholder: "New task  @today #tag +project 30m" },
-		});
-		this.addBtn = addRow.createEl("button", { text: "+", cls: "sp-add-btn" });
-		this.dropdown = addRow.createDiv({ cls: "sp-dropdown" });
+		const addRow = root.createDiv();
+		this.quickAdd = new QuickAddInput(
+			addRow,
+			() => this.tags,
+			() => this.projects,
+			(parsed) => {
+				void this.doAdd(parsed);
+			}
+		);
 
 		root.createDiv({ cls: "sp-hint", text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · 30m/2h" });
 		this.tabsContainer = root.createDiv({ cls: "sp-project-tabs" });
 		this.statusEl = root.createDiv({ cls: "sp-status" });
 
 		this.groupsContainer = root.createDiv({ cls: "sp-groups" });
-
-		this.addBtn.addEventListener("click", () => {
-			void this.doAdd();
-		});
-		this.input.addEventListener("input", () => this.updateSuggestions());
-		this.input.addEventListener("blur", () => window.setTimeout(() => this.hideDropdown(), 150));
-		this.input.addEventListener("keydown", (e) => this.onInputKeydown(e));
 	}
 
 	async refresh(): Promise<void> {
@@ -149,104 +133,12 @@ export class SPView extends ItemView {
 		}
 	}
 
-	// ---- add-task autocomplete -------------------------------------------------
-
-	private currentToken(): TokenMatch | null {
-		const pos = this.input.selectionStart ?? this.input.value.length;
-		const m = this.input.value.slice(0, pos).match(/([@#+])([^\s@#+]*)$/);
-		if (!m) return null;
-		return { trigger: m[1] as "@" | "#" | "+", partial: m[2].toLowerCase(), start: pos - m[0].length };
-	}
-
-	private hideDropdown(): void {
-		this.dropdown.removeClass("is-open");
-		this.dropdown.empty();
-		this.suggestions = [];
-	}
-
-	private renderDropdown(trigger: string): void {
-		this.dropdown.empty();
-		this.dropdown.addClass("is-open");
-		this.suggestions.forEach((s, i) => {
-			const item = this.dropdown.createDiv({
-				cls: "sp-dropdown-item" + (i === this.selIdx ? " is-selected" : ""),
-				text: trigger + s,
-			});
-			item.addEventListener("mousedown", (e) => {
-				e.preventDefault();
-				this.applySuggestion(trigger, s);
-			});
-		});
-	}
-
-	private applySuggestion(trigger: string, s: string): void {
-		const before = this.input.value.slice(0, this.tokenStart);
-		const after = this.input.value.slice(this.input.selectionStart ?? this.input.value.length);
-		const insertion = trigger + s + " ";
-		this.input.value = before + insertion + after;
-		const pos = (before + insertion).length;
-		this.input.focus();
-		this.input.setSelectionRange(pos, pos);
-		this.hideDropdown();
-	}
-
-	private updateSuggestions(): void {
-		const tok = this.currentToken();
-		if (!tok) {
-			this.hideDropdown();
-			return;
-		}
-		let items: string[] = [];
-		if (tok.trigger === "@") items = DATE_KEYWORDS.filter((k) => k.startsWith(tok.partial));
-		else if (tok.trigger === "#") items = this.tags.map((t) => t.title).filter((t) => t.toLowerCase().startsWith(tok.partial));
-		else if (tok.trigger === "+") items = this.projects.map((p) => p.title).filter((t) => t.toLowerCase().startsWith(tok.partial));
-		if (items.length === 0) {
-			this.hideDropdown();
-			return;
-		}
-		this.suggestions = items;
-		this.selIdx = 0;
-		this.tokenStart = tok.start;
-		this.renderDropdown(tok.trigger);
-	}
-
-	private onInputKeydown(e: KeyboardEvent): void {
-		if (this.dropdown.hasClass("is-open")) {
-			const tok = this.currentToken();
-			if (e.key === "ArrowDown") {
-				e.preventDefault();
-				this.selIdx = (this.selIdx + 1) % this.suggestions.length;
-				if (tok) this.renderDropdown(tok.trigger);
-				return;
-			}
-			if (e.key === "ArrowUp") {
-				e.preventDefault();
-				this.selIdx = (this.selIdx - 1 + this.suggestions.length) % this.suggestions.length;
-				if (tok) this.renderDropdown(tok.trigger);
-				return;
-			}
-			if (e.key === "Tab" || e.key === "Enter") {
-				e.preventDefault();
-				if (tok) this.applySuggestion(tok.trigger, this.suggestions[this.selIdx]);
-				return;
-			}
-			if (e.key === "Escape") {
-				this.hideDropdown();
-				return;
-			}
-		}
-		if (e.key === "Enter") void this.doAdd();
-	}
-
-	private async doAdd(): Promise<void> {
-		const raw = this.input.value.trim();
-		if (!raw) return;
-		const parsed = parseInput(raw, this.tags, this.projects);
+	private async doAdd(parsed: ParsedInput): Promise<void> {
 		if (!parsed.title) {
 			this.statusEl.setText("Title is missing (only shortcuts entered?)");
 			return;
 		}
-		this.addBtn.disabled = true;
+		this.quickAdd.setDisabled(true);
 		try {
 			const body: Partial<SPTask> & { title: string; projectId: string } = {
 				title: parsed.title,
@@ -257,7 +149,7 @@ export class SPView extends ItemView {
 			if (parsed.timeEstimate) body.timeEstimate = parsed.timeEstimate;
 			const newTask = await this.plugin.api.createTask(body);
 			this.tasks.push(newTask);
-			this.input.value = "";
+			this.quickAdd.clear();
 			this.statusEl.setText("");
 			this.statusEl.removeClass("sp-status-error");
 			this.renderGroups();
@@ -265,7 +157,7 @@ export class SPView extends ItemView {
 			this.statusEl.setText("Error: " + getErrorMessage(e));
 			this.statusEl.addClass("sp-status-error");
 		} finally {
-			this.addBtn.disabled = false;
+			this.quickAdd.setDisabled(false);
 		}
 	}
 
@@ -317,7 +209,7 @@ export class SPView extends ItemView {
 				attr: { title: this.priorityTagEntries[rank].title },
 			});
 		}
-		row.createSpan({ cls: "sp-task-title", text: t.title });
+		this.renderTaskTitle(row, t);
 
 		const meta = row.createDiv({ cls: "sp-task-meta" });
 		const dl = showDate ? dateLabel(t) : null;
@@ -343,6 +235,79 @@ export class SPView extends ItemView {
 		checkbox.addEventListener("change", () => {
 			void this.completeTask(t, checkbox);
 		});
+
+		const deleteBtn = row.createEl("button", { cls: "sp-task-delete" });
+		setIcon(deleteBtn, "trash-2");
+		deleteBtn.setAttribute("aria-label", "Delete task");
+		deleteBtn.addEventListener("click", () => {
+			if (!window.confirm(`Delete "${t.title}"? This can't be undone in SuperProductivity.`)) return;
+			void this.deleteTaskRow(t);
+		});
+	}
+
+	private renderTaskTitle(row: HTMLElement, t: SPTask): void {
+		const titleSpan = row.createSpan({ cls: "sp-task-title", text: t.title, attr: { title: "Click to rename" } });
+		const titleInput = row.createEl("input", { type: "text", cls: "sp-task-title-input" });
+		titleInput.hidden = true;
+
+		const cancelEdit = () => {
+			titleInput.hidden = true;
+			titleSpan.hidden = false;
+		};
+		const commitEdit = () => {
+			if (titleInput.hidden) return;
+			const newTitle = titleInput.value.trim();
+			if (!newTitle || newTitle === t.title) {
+				cancelEdit();
+				return;
+			}
+			void this.renameTask(t, newTitle, titleSpan, titleInput);
+		};
+
+		titleSpan.addEventListener("click", () => {
+			titleSpan.hidden = true;
+			titleInput.hidden = false;
+			titleInput.value = t.title;
+			titleInput.focus();
+			titleInput.select();
+		});
+		titleInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") {
+				e.preventDefault();
+				commitEdit();
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				cancelEdit();
+			}
+		});
+		titleInput.addEventListener("blur", commitEdit);
+	}
+
+	private async renameTask(t: SPTask, newTitle: string, titleSpan: HTMLElement, titleInput: HTMLInputElement): Promise<void> {
+		titleInput.disabled = true;
+		try {
+			await this.plugin.api.patchTask(t.id, { title: newTitle });
+			t.title = newTitle;
+			titleSpan.setText(newTitle);
+		} catch (e) {
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+		} finally {
+			titleInput.disabled = false;
+			titleInput.hidden = true;
+			titleSpan.hidden = false;
+		}
+	}
+
+	private async deleteTaskRow(t: SPTask): Promise<void> {
+		try {
+			await this.plugin.api.deleteTask(t.id);
+			this.tasks = this.tasks.filter((x) => x.id !== t.id);
+			this.renderGroups();
+		} catch (e) {
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+		}
 	}
 
 	private async completeTask(t: SPTask, checkbox: HTMLInputElement): Promise<void> {

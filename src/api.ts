@@ -117,6 +117,23 @@ export class SuperProductivityClient {
 		return this.call("GET", "/tasks");
 	}
 
+	async deleteTask(id: string): Promise<void> {
+		if (!this.getConfig().token) {
+			throw new SPApiError("No API token configured. Open the setup wizard in the plugin settings.");
+		}
+		const res = await this.request("DELETE", `/tasks/${id}`);
+		if (res.status < 200 || res.status >= 300) {
+			let message: string | undefined;
+			try {
+				const parsed: unknown = res.text ? JSON.parse(res.text) : null;
+				if (isSPEnvelope(parsed)) message = parsed.error?.message;
+			} catch {
+				// no parseable body; fall back to the generic message below
+			}
+			throw new SPApiError(message || `Request failed (status ${res.status}).`);
+		}
+	}
+
 	patchTask(id: string, patch: Partial<SPTask>): Promise<SPTask> {
 		return this.call("PATCH", `/tasks/${id}`, patch);
 	}

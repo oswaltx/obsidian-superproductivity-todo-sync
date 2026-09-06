@@ -4,6 +4,7 @@ import { SPSettingTab } from "./settings";
 import { DEFAULT_SETTINGS, SPPluginSettings } from "./types";
 import { SPView, VIEW_TYPE_SP } from "./view";
 import { SPSetupWizardModal } from "./wizard";
+import { QuickAddModal } from "./quickadd-modal";
 
 export default class SuperProductivitySyncPlugin extends Plugin {
 	settings!: SPPluginSettings;
@@ -35,6 +36,12 @@ export default class SuperProductivitySyncPlugin extends Plugin {
 			id: "open-superproductivity-setup-wizard",
 			name: "Open setup wizard",
 			callback: () => new SPSetupWizardModal(this.app, this).open(),
+		});
+
+		this.addCommand({
+			id: "quick-add-superproductivity-task",
+			name: "Quick add task",
+			callback: () => new QuickAddModal(this.app, this).open(),
 		});
 
 		this.addSettingTab(new SPSettingTab(this.app, this));

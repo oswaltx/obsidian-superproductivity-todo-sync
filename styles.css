@@ -110,6 +110,39 @@
 
 .sp-task-title {
 	flex: 1;
+	cursor: pointer;
+}
+
+.sp-task-title:hover {
+	text-decoration: underline dotted;
+}
+
+.sp-task-title-input {
+	flex: 1;
+	font: inherit;
+	color: inherit;
+	background: var(--background-primary);
+	border: 1px solid var(--interactive-accent);
+	border-radius: 4px;
+	padding: 0 0.2em;
+}
+
+.sp-task-delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	padding: 2px;
+	opacity: 0.4;
+	color: var(--text-muted);
+}
+
+.sp-task-delete:hover {
+	opacity: 1;
+	color: var(--text-error);
 }
 
 .sp-task-meta {
