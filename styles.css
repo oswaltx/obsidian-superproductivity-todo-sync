@@ -19,6 +19,11 @@
 	margin-bottom: 0.5em;
 }
 
+.sp-search-input {
+	width: 100%;
+	margin-bottom: 0.5em;
+}
+
 .sp-project-tabs {
 	display: flex;
 	flex-wrap: wrap;
@@ -171,6 +176,26 @@
 	color: var(--text-on-accent);
 	font-size: 0.7em;
 	font-weight: 600;
+}
+
+.sp-date-badge {
+	border: none;
+	cursor: pointer;
+	font-size: inherit;
+	color: inherit;
+}
+
+.sp-date-badge:hover {
+	background: var(--background-modifier-hover);
+}
+
+.sp-date-input {
+	font-size: 0.8em;
+	padding: 0 0.2em;
+	border: 1px solid var(--interactive-accent);
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: inherit;
 }
 
 .sp-note-link {

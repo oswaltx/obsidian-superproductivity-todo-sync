@@ -13,6 +13,7 @@ cloud account, no third-party server.
   (tasks carrying a configurable "waiting" tag).
 - **Project tabs** above the list ("All" plus one per SuperProductivity
   project) to filter the whole view down to a single project.
+- A **filter box** to narrow the visible tasks by a title search.
 - Quick-add input with the same `@`/`#`/`+` shortcut syntax as
   SuperProductivity's own add-task bar, with autocomplete:
   - `@today`, `@tomorrow`, a weekday name, or `@nextweek` for the due date
@@ -23,7 +24,8 @@ cloud account, no third-party server.
   under Settings → Hotkeys) opens the same quick-add input in a small modal,
   so you can log a task without switching to the sidebar.
 - Checkboxes to mark tasks done, patched straight back to SuperProductivity.
-- Click a task's title to rename it in place.
+- Click a task's title to rename it in place, or its due-date badge to
+  change the date (a calendar icon shows for tasks without one yet).
 - A trash icon to delete a task (asks for confirmation first — SuperProductivity
   has no undo for this via the REST API).
 - One-click "→ all to today" to reschedule every overdue task at once.

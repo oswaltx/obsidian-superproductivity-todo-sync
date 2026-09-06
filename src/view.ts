@@ -23,6 +23,7 @@ export class SPView extends ItemView {
 	private priorityTagEntries: { id: string; title: string }[] = [];
 	private selectedProjectId: string | null = null;
 	private tabsContainer!: HTMLElement;
+	private searchQuery = "";
 
 	constructor(leaf: WorkspaceLeaf, plugin: SuperProductivitySyncPlugin) {
 		super(leaf);
@@ -102,6 +103,17 @@ export class SPView extends ItemView {
 		);
 
 		root.createDiv({ cls: "sp-hint", text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · 30m/2h" });
+
+		const searchInput = root.createEl("input", {
+			type: "search",
+			cls: "sp-search-input",
+			attr: { placeholder: "Filter tasks…" },
+		});
+		searchInput.addEventListener("input", () => {
+			this.searchQuery = searchInput.value.trim().toLowerCase();
+			this.renderGroups();
+		});
+
 		this.tabsContainer = root.createDiv({ cls: "sp-project-tabs" });
 		this.statusEl = root.createDiv({ cls: "sp-status" });
 
@@ -212,8 +224,7 @@ export class SPView extends ItemView {
 		this.renderTaskTitle(row, t);
 
 		const meta = row.createDiv({ cls: "sp-task-meta" });
-		const dl = showDate ? dateLabel(t) : null;
-		if (dl) this.badge(meta, dl);
+		this.renderDateBadge(meta, t, showDate);
 		const pTitle = this.selectedProjectId === null && t.projectId ? projectTitle.get(t.projectId) : undefined;
 		if (pTitle) this.badge(meta, pTitle);
 
@@ -299,6 +310,53 @@ export class SPView extends ItemView {
 		}
 	}
 
+	private renderDateBadge(meta: HTMLElement, t: SPTask, showDate: boolean): void {
+		const label = showDate ? dateLabel(t) : null;
+		const badge = meta.createEl("button", { cls: "sp-badge sp-date-badge" });
+		if (label) badge.setText(label);
+		else setIcon(badge, "calendar");
+		badge.setAttribute("aria-label", "Change due date");
+
+		const dateInput = meta.createEl("input", { type: "date", cls: "sp-date-input" });
+		dateInput.hidden = true;
+		if (t.dueDay) dateInput.value = t.dueDay;
+
+		badge.addEventListener("click", () => {
+			badge.hidden = true;
+			dateInput.hidden = false;
+			dateInput.focus();
+		});
+		dateInput.addEventListener("change", () => {
+			if (!dateInput.value) {
+				dateInput.hidden = true;
+				badge.hidden = false;
+				return;
+			}
+			void this.setDueDate(t, dateInput.value, badge, dateInput);
+		});
+		dateInput.addEventListener("blur", () => {
+			if (!dateInput.hidden) {
+				dateInput.hidden = true;
+				badge.hidden = false;
+			}
+		});
+	}
+
+	private async setDueDate(t: SPTask, dueDay: string, badge: HTMLButtonElement, dateInput: HTMLInputElement): Promise<void> {
+		dateInput.disabled = true;
+		try {
+			await this.plugin.api.patchTask(t.id, { dueDay });
+			t.dueDay = dueDay;
+			this.renderGroups();
+		} catch (e) {
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+			dateInput.disabled = false;
+			dateInput.hidden = true;
+			badge.hidden = false;
+		}
+	}
+
 	private async deleteTaskRow(t: SPTask): Promise<void> {
 		try {
 			await this.plugin.api.deleteTask(t.id);
@@ -332,7 +390,10 @@ export class SPView extends ItemView {
 	private renderGroups(): void {
 		this.groupsContainer.empty();
 		const open = this.tasks.filter(
-			(t) => !t.isDone && (this.selectedProjectId === null || t.projectId === this.selectedProjectId)
+			(t) =>
+				!t.isDone &&
+				(this.selectedProjectId === null || t.projectId === this.selectedProjectId) &&
+				(!this.searchQuery || t.title.toLowerCase().includes(this.searchQuery))
 		);
 		const today = new Date();
 		const todayStr = today.toISOString().slice(0, 10);
