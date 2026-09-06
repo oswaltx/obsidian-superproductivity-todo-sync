@@ -19,6 +19,28 @@
 	margin-bottom: 0.5em;
 }
 
+.sp-project-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3em;
+	margin-bottom: 0.5em;
+}
+
+.sp-project-tab {
+	font-size: 0.8em;
+	padding: 0.15em 0.7em;
+	border-radius: 999px;
+	background: var(--background-modifier-border);
+	border: none;
+	cursor: pointer;
+	box-shadow: none;
+}
+
+.sp-project-tab.is-active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
 .sp-status {
 	opacity: 0.7;
 	font-size: 0.85em;

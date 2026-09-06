@@ -31,6 +31,8 @@ export class SPView extends ItemView {
 	private selIdx = 0;
 	private tokenStart = -1;
 	private priorityTagEntries: { id: string; title: string }[] = [];
+	private selectedProjectId: string | null = null;
+	private tabsContainer!: HTMLElement;
 
 	constructor(leaf: WorkspaceLeaf, plugin: SuperProductivitySyncPlugin) {
 		super(leaf);
@@ -109,6 +111,7 @@ export class SPView extends ItemView {
 		this.dropdown = addRow.createDiv({ cls: "sp-dropdown" });
 
 		root.createDiv({ cls: "sp-hint", text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · 30m/2h" });
+		this.tabsContainer = root.createDiv({ cls: "sp-project-tabs" });
 		this.statusEl = root.createDiv({ cls: "sp-status" });
 
 		this.groupsContainer = root.createDiv({ cls: "sp-groups" });
@@ -134,6 +137,10 @@ export class SPView extends ItemView {
 			this.loaded = true;
 			this.statusEl.setText("");
 			this.statusEl.removeClass("sp-status-error");
+			if (this.selectedProjectId && !projects.some((p) => p.id === this.selectedProjectId)) {
+				this.selectedProjectId = null;
+			}
+			this.renderProjectTabs();
 			this.renderGroups();
 		} catch (e) {
 			this.statusEl.setText("SuperProductivity is unreachable: " + getErrorMessage(e));
@@ -264,6 +271,33 @@ export class SPView extends ItemView {
 
 	// ---- rendering ---------------------------------------------------------
 
+	private renderProjectTabs(): void {
+		this.tabsContainer.empty();
+		if (this.projects.length === 0) return;
+
+		const allTab = this.tabsContainer.createEl("button", {
+			cls: "sp-project-tab" + (this.selectedProjectId === null ? " is-active" : ""),
+			text: "All",
+		});
+		allTab.addEventListener("click", () => {
+			this.selectedProjectId = null;
+			this.renderProjectTabs();
+			this.renderGroups();
+		});
+
+		for (const p of this.projects) {
+			const tab = this.tabsContainer.createEl("button", {
+				cls: "sp-project-tab" + (this.selectedProjectId === p.id ? " is-active" : ""),
+				text: p.title,
+			});
+			tab.addEventListener("click", () => {
+				this.selectedProjectId = p.id;
+				this.renderProjectTabs();
+				this.renderGroups();
+			});
+		}
+	}
+
 	private badge(parent: HTMLElement, text: string): void {
 		parent.createSpan({ cls: "sp-badge", text });
 	}
@@ -288,7 +322,7 @@ export class SPView extends ItemView {
 		const meta = row.createDiv({ cls: "sp-task-meta" });
 		const dl = showDate ? dateLabel(t) : null;
 		if (dl) this.badge(meta, dl);
-		const pTitle = t.projectId ? projectTitle.get(t.projectId) : undefined;
+		const pTitle = this.selectedProjectId === null && t.projectId ? projectTitle.get(t.projectId) : undefined;
 		if (pTitle) this.badge(meta, pTitle);
 
 		const noteMatch = (t.notes || "").match(/obsidian:\/\/open\?[^)\s]*?file=([^)&\s]+)/);
@@ -332,7 +366,9 @@ export class SPView extends ItemView {
 
 	private renderGroups(): void {
 		this.groupsContainer.empty();
-		const open = this.tasks.filter((t) => !t.isDone);
+		const open = this.tasks.filter(
+			(t) => !t.isDone && (this.selectedProjectId === null || t.projectId === this.selectedProjectId)
+		);
 		const today = new Date();
 		const todayStr = today.toISOString().slice(0, 10);
 		const weekEnd = new Date(today);
