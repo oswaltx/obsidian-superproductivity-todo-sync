@@ -155,6 +155,13 @@
 	color: var(--text-error);
 }
 
+.sp-task-delete.is-armed {
+	opacity: 1;
+	color: var(--text-on-accent);
+	background: var(--text-error);
+	border-radius: 4px;
+}
+
 .sp-task-meta {
 	display: flex;
 	gap: 0.4em;

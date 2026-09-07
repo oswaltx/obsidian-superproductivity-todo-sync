@@ -261,10 +261,39 @@ export class SPView extends ItemView {
 		const deleteBtn = row.createEl("button", { cls: "sp-task-delete" });
 		setIcon(deleteBtn, "trash-2");
 		deleteBtn.setAttribute("aria-label", "Delete task");
+		this.wireDeleteButton(deleteBtn, t);
+	}
+
+	/**
+	 * A click "arms" the button (turns it red with a check icon) instead of
+	 * popping a blocking native confirm() dialog; a second click within a
+	 * few seconds actually deletes. Same one-accidental-click protection for
+	 * an action SuperProductivity can't undo, without interrupting the flow
+	 * of clicking through a list.
+	 */
+	private wireDeleteButton(deleteBtn: HTMLButtonElement, t: SPTask): void {
+		let armTimeout: number | null = null;
+		const disarm = () => {
+			if (armTimeout !== null) {
+				window.clearTimeout(armTimeout);
+				armTimeout = null;
+			}
+			deleteBtn.removeClass("is-armed");
+			setIcon(deleteBtn, "trash-2");
+			deleteBtn.setAttribute("aria-label", "Delete task");
+		};
 		deleteBtn.addEventListener("click", () => {
-			if (!window.confirm(`Delete "${t.title}"? This can't be undone in SuperProductivity.`)) return;
+			if (armTimeout === null) {
+				deleteBtn.addClass("is-armed");
+				setIcon(deleteBtn, "check");
+				deleteBtn.setAttribute("aria-label", `Click again to delete "${t.title}"`);
+				armTimeout = window.setTimeout(disarm, 3000);
+				return;
+			}
+			disarm();
 			void this.deleteTaskRow(t);
 		});
+		deleteBtn.addEventListener("blur", disarm);
 	}
 
 	private renderTaskTitle(row: HTMLElement, t: SPTask): void {
