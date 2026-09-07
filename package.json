@@ -1,6 +1,6 @@
 {
   "name": "superproductivity-todo-sync",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "View and edit your SuperProductivity tasks via SuperProductivity's local REST API.",
   "main": "main.js",
   "scripts": {

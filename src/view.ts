@@ -24,6 +24,7 @@ export class SPView extends ItemView {
 	private selectedProjectId: string | null = null;
 	private tabsContainer!: HTMLElement;
 	private searchQuery = "";
+	private draggedTaskId: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: SuperProductivitySyncPlugin) {
 		super(leaf);
@@ -54,6 +55,7 @@ export class SPView extends ItemView {
 
 		this.buildChrome(root);
 		this.startInterval();
+		this.registerFocusRefresh();
 		await this.refresh();
 	}
 
@@ -80,6 +82,24 @@ export class SPView extends ItemView {
 			this.intervalId = window.setInterval(() => this.refresh(), seconds * 1000);
 			this.registerInterval(this.intervalId);
 		}
+	}
+
+	/**
+	 * SuperProductivity's REST API is request/response only - there's no
+	 * push/webhook to notify us when something changes on its side (e.g. the
+	 * user checks off or adds a task directly in the app). Polling on an
+	 * interval is the baseline; refreshing the instant Obsidian regains
+	 * focus or becomes visible again covers the common case - switching
+	 * back from SuperProductivity's window - almost immediately, without
+	 * hammering the local server on a much shorter interval.
+	 */
+	private registerFocusRefresh(): void {
+		this.registerDomEvent(window, "focus", () => {
+			void this.refresh();
+		});
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (document.visibilityState === "visible") void this.refresh();
+		});
 	}
 
 	/** Called by the settings tab after the refresh interval changes. */
@@ -217,6 +237,7 @@ export class SPView extends ItemView {
 	private renderTaskRow(container: HTMLElement, t: SPTask, showDate: boolean, isSubtask: boolean): void {
 		const projectTitle = new Map(this.projects.map((p) => [p.id, p.title]));
 		const row = container.createDiv({ cls: isSubtask ? "sp-task-row sp-subtask-row" : "sp-task-row" });
+		this.wireDragAndDrop(row, t, isSubtask);
 		const checkbox = row.createEl("input", { type: "checkbox" });
 		if (!isSubtask) {
 			const rank = prioRank(
@@ -408,6 +429,82 @@ export class SPView extends ItemView {
 		}
 	}
 
+	/**
+	 * Dragging any open task onto a top-level task row makes it a subtask of
+	 * that row. Only top-level rows are valid drop targets - a subtask can't
+	 * itself be a parent (SuperProductivity's task model is two levels deep),
+	 * so restricting drop targets this way also rules out creating a cycle.
+	 */
+	private wireDragAndDrop(row: HTMLElement, t: SPTask, isSubtask: boolean): void {
+		row.draggable = true;
+		row.addEventListener("dragstart", (e) => {
+			this.draggedTaskId = t.id;
+			e.dataTransfer?.setData("text/plain", t.id);
+			if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+		});
+		row.addEventListener("dragend", () => {
+			this.draggedTaskId = null;
+		});
+
+		if (isSubtask) return; // only top-level rows accept drops
+
+		row.addEventListener("dragover", (e) => {
+			if (!this.draggedTaskId || this.draggedTaskId === t.id) return;
+			e.preventDefault();
+			row.addClass("is-drop-target");
+		});
+		row.addEventListener("dragleave", () => row.removeClass("is-drop-target"));
+		row.addEventListener("drop", (e) => {
+			e.preventDefault();
+			row.removeClass("is-drop-target");
+			const draggedId = this.draggedTaskId;
+			this.draggedTaskId = null;
+			if (!draggedId || draggedId === t.id) return;
+			const dragged = this.tasks.find((x) => x.id === draggedId);
+			if (!dragged) return;
+			void this.makeSubtask(dragged, t);
+		});
+	}
+
+	/**
+	 * SuperProductivity's API can't re-parent a task via PATCH ("parentId and
+	 * subTaskIds cannot be set via PATCH... delete and recreate the task" per
+	 * its own docs), so this creates a new subtask carrying the dragged
+	 * task's title/dueDay/timeEstimate (tags/project are dropped - a subtask
+	 * always inherits its parent's project and can't have its own tags), and
+	 * only deletes the original once that succeeds - so a failure never loses
+	 * the task, at worst it leaves a duplicate.
+	 */
+	private async makeSubtask(dragged: SPTask, newParent: SPTask): Promise<void> {
+		if (dragged.parentId === newParent.id) return; // already a subtask of this task
+		if (dragged.subTaskIds?.length) {
+			new Notice(`Can't make "${dragged.title}" a subtask: it has its own subtasks, which would be orphaned.`);
+			return;
+		}
+		try {
+			const body: Partial<SPTask> & { title: string; parentId: string } = {
+				title: dragged.title,
+				parentId: newParent.id,
+			};
+			if (dragged.dueDay) body.dueDay = dragged.dueDay;
+			if (dragged.timeEstimate) body.timeEstimate = dragged.timeEstimate;
+			const created = await this.plugin.api.createTask(body);
+			try {
+				await this.plugin.api.deleteTask(dragged.id);
+				this.tasks = this.tasks.filter((x) => x.id !== dragged.id);
+			} catch (e) {
+				new Notice(
+					`Created the subtask, but couldn't remove the original "${dragged.title}" - you may want to delete it manually. (${getErrorMessage(e)})`
+				);
+			}
+			this.tasks.push(created);
+			this.renderGroups();
+		} catch (e) {
+			this.statusEl.setText("Error: " + getErrorMessage(e));
+			this.statusEl.addClass("sp-status-error");
+		}
+	}
+
 	private async completeTask(t: SPTask, checkbox: HTMLInputElement): Promise<void> {
 		checkbox.disabled = true;
 		try {
@@ -493,10 +590,12 @@ export class SPView extends ItemView {
 		}
 		for (const t of list) {
 			this.renderTaskRow(this.groupsContainer, t, showDate, false);
-			if (t.subTaskIds?.length) {
-				const subtasks = this.tasks.filter((x) => x.parentId === t.id && !x.isDone);
-				for (const sub of subtasks) this.renderTaskRow(this.groupsContainer, sub, false, true);
-			}
+			// Looked up by parentId rather than gated on t.subTaskIds: that field
+			// is only ever refreshed from the server, so a subtask just created
+			// locally (e.g. via drag-and-drop) wouldn't render until the next
+			// full refresh() if we trusted it instead.
+			const subtasks = this.tasks.filter((x) => x.parentId === t.id && !x.isDone);
+			for (const sub of subtasks) this.renderTaskRow(this.groupsContainer, sub, false, true);
 		}
 	}
 

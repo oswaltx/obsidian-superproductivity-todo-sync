@@ -26,16 +26,24 @@ cloud account, no third-party server.
     input is dropped when `^` resolves)
   - `30m` / `2h` for a time estimate
 - Subtasks are shown indented directly under their parent task, wherever the
-  parent falls in the due-date grouping.
+  parent falls in the due-date grouping. Drag any task onto a top-level task
+  to make it a subtask (SuperProductivity's API can't re-parent a task
+  directly, so this re-creates it as a subtask and removes the original).
 - A **"Quick add task" command** (Command palette → assign your own hotkey
   under Settings → Hotkeys) opens the same quick-add input in a small modal,
   so you can log a task without switching to the sidebar.
 - Checkboxes to mark tasks done, patched straight back to SuperProductivity.
 - Click a task's title to rename it in place, or its due-date badge to
   change the date (a calendar icon shows for tasks without one yet).
-- A trash icon to delete a task (asks for confirmation first — SuperProductivity
-  has no undo for this via the REST API).
+- A trash icon to delete a task — click once to arm it (turns red), click
+  again to confirm. SuperProductivity has no undo for this via the REST API.
 - One-click "→ all to today" to reschedule every overdue task at once.
+- The view refreshes automatically on an interval, and immediately whenever
+  Obsidian regains focus — so checking something off or adding a task
+  directly in SuperProductivity shows up here almost as soon as you switch
+  back. (SuperProductivity's REST API has no push/webhook mechanism, so this
+  is the closest to real-time sync that's possible without polling
+  aggressively.)
 - If a task's notes contain an `obsidian://open?...&file=<path>` link, a small
   icon opens that note directly inside Obsidian.
 - A guided setup wizard for the base URL and API token.
