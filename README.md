@@ -47,6 +47,8 @@ cloud account, no third-party server.
 - If a task's notes contain an `obsidian://open?...&file=<path>` link, a small
   icon opens that note directly inside Obsidian.
 - A guided setup wizard for the base URL and API token.
+- A "what's new" popup after an update, with a link to this repo and to the
+  funding page — also reachable anytime from the settings tab.
 
 ## Requirements
 

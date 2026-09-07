@@ -33,6 +33,8 @@ export interface SPPluginSettings {
 	/** Tag title (case-insensitive) that marks a task as "waiting". */
 	waitingTag: string;
 	setupCompleted: boolean;
+	/** Last plugin version a "what's new" modal was shown for; undefined before the feature existed or on first install. */
+	lastShownVersion?: string;
 }
 
 export const DEFAULT_SETTINGS: SPPluginSettings = {

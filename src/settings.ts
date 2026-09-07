@@ -1,6 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type SuperProductivitySyncPlugin from "./main";
+import { CHANGELOG } from "./changelog";
 import { SPSetupWizardModal } from "./wizard";
+import { WhatsNewModal } from "./whats-new-modal";
 
 export class SPSettingTab extends PluginSettingTab {
 	constructor(app: App, private plugin: SuperProductivitySyncPlugin) {
@@ -17,6 +19,15 @@ export class SPSettingTab extends PluginSettingTab {
 			.addButton((b) =>
 				b.setButtonText("Open setup wizard").onClick(() => {
 					new SPSetupWizardModal(this.app, this.plugin).open();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("What's new")
+			.setDesc("See what's changed across every version of this plugin.")
+			.addButton((b) =>
+				b.setButtonText("Show changelog").onClick(() => {
+					new WhatsNewModal(this.app, CHANGELOG).open();
 				})
 			);
 

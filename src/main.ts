@@ -5,6 +5,8 @@ import { DEFAULT_SETTINGS, SPPluginSettings } from "./types";
 import { SPView, VIEW_TYPE_SP } from "./view";
 import { SPSetupWizardModal } from "./wizard";
 import { QuickAddModal } from "./quickadd-modal";
+import { getEntriesSince } from "./changelog";
+import { WhatsNewModal } from "./whats-new-modal";
 
 export default class SuperProductivitySyncPlugin extends Plugin {
 	settings!: SPPluginSettings;
@@ -51,6 +53,29 @@ export default class SuperProductivitySyncPlugin extends Plugin {
 				new SPSetupWizardModal(this.app, this).open();
 			});
 		}
+
+		void this.checkForUpdate();
+	}
+
+	/**
+	 * Shows a "what's new" modal once per version bump. Skipped on a genuine
+	 * first install (the setup wizard opens instead) - lastShownVersion is
+	 * still recorded silently so the modal starts working from the next
+	 * update onward.
+	 */
+	private async checkForUpdate(): Promise<void> {
+		const currentVersion = this.manifest.version;
+		if (this.settings.lastShownVersion === currentVersion) return;
+
+		if (this.settings.setupCompleted) {
+			const entries = getEntriesSince(this.settings.lastShownVersion);
+			this.app.workspace.onLayoutReady(() => {
+				new WhatsNewModal(this.app, entries).open();
+			});
+		}
+
+		this.settings.lastShownVersion = currentVersion;
+		await this.saveSettings();
 	}
 
 	async loadSettings(): Promise<void> {
