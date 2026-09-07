@@ -7,12 +7,13 @@ import { getErrorMessage } from "./util";
 
 /**
  * Standalone "add a task" modal for the quick-add command, usable without
- * the sidebar view open. Fetches its own tags/projects on open so the same
- * @/#/+ autocomplete works here too.
+ * the sidebar view open. Fetches its own tags/projects/tasks on open so the
+ * same @/#/+/^ autocomplete works here too.
  */
 export class QuickAddModal extends Modal {
 	private tags: SPTag[] = [];
 	private projects: SPProject[] = [];
+	private tasks: SPTask[] = [];
 	private quickAdd!: QuickAddInput;
 	private statusEl!: HTMLElement;
 
@@ -31,13 +32,17 @@ export class QuickAddModal extends Modal {
 			row,
 			() => this.tags,
 			() => this.projects,
+			() => this.tasks.filter((t) => !t.parentId),
 			(parsed) => {
 				void this.submit(parsed);
 			}
 		);
 		this.quickAdd.setDisabled(true);
 
-		contentEl.createDiv({ cls: "sp-hint", text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · 30m/2h" });
+		contentEl.createDiv({
+			cls: "sp-hint",
+			text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · ^parent task · 30m/2h",
+		});
 		this.statusEl = contentEl.createEl("p", { cls: "sp-wizard-status" });
 		this.statusEl.setText("Loading projects and tags …");
 
@@ -50,9 +55,14 @@ export class QuickAddModal extends Modal {
 
 	private async loadOptions(): Promise<void> {
 		try {
-			const [projects, tags] = await Promise.all([this.plugin.api.getProjects(), this.plugin.api.getTags()]);
+			const [projects, tags, tasks] = await Promise.all([
+				this.plugin.api.getProjects(),
+				this.plugin.api.getTags(),
+				this.plugin.api.getTasks(),
+			]);
 			this.projects = projects;
 			this.tags = tags;
+			this.tasks = tasks;
 			this.statusEl.setText("");
 			this.quickAdd.setDisabled(false);
 			this.quickAdd.focus();
@@ -69,12 +79,16 @@ export class QuickAddModal extends Modal {
 		}
 		this.quickAdd.setDisabled(true);
 		try {
-			const body: Partial<SPTask> & { title: string; projectId: string } = {
-				title: parsed.title,
-				projectId: parsed.projectId || "INBOX_PROJECT",
-			};
+			// A subtask create can carry neither projectId nor tagIds - it always
+			// inherits its parent's project and can't have its own tags.
+			const body: Partial<SPTask> & { title: string } = { title: parsed.title };
+			if (parsed.parentId) {
+				body.parentId = parsed.parentId;
+			} else {
+				body.projectId = parsed.projectId || "INBOX_PROJECT";
+				if (parsed.tagIds.length) body.tagIds = parsed.tagIds;
+			}
 			if (parsed.dueDay) body.dueDay = parsed.dueDay;
-			if (parsed.tagIds.length) body.tagIds = parsed.tagIds;
 			if (parsed.timeEstimate) body.timeEstimate = parsed.timeEstimate;
 			await this.plugin.api.createTask(body);
 			new Notice(`Task added: ${parsed.title}`);

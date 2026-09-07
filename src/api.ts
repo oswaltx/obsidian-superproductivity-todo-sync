@@ -138,7 +138,13 @@ export class SuperProductivityClient {
 		return this.call("PATCH", `/tasks/${id}`, patch);
 	}
 
-	createTask(body: Partial<SPTask> & { title: string; projectId: string }): Promise<SPTask> {
+	/**
+	 * projectId is required for a normal top-level task but must be omitted
+	 * for a subtask create (body.parentId set instead) - SuperProductivity's
+	 * API rejects a subtask create that also carries projectId or tagIds, so
+	 * this is intentionally looser than "always require projectId".
+	 */
+	createTask(body: Partial<SPTask> & { title: string }): Promise<SPTask> {
 		return this.call("POST", "/tasks", body);
 	}
 

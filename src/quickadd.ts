@@ -1,14 +1,14 @@
-import type { SPProject, SPTag } from "./types";
+import type { SPProject, SPTag, SPTask } from "./types";
 import { DATE_KEYWORDS, parseInput, type ParsedInput } from "./parse";
 
 interface TokenMatch {
-	trigger: "@" | "#" | "+";
+	trigger: "@" | "#" | "+" | "^";
 	partial: string;
 	start: number;
 }
 
 /**
- * The `@`/`#`/`+`-shortcut input with autocomplete, shared between the
+ * The `@`/`#`/`+`/`^`-shortcut input with autocomplete, shared between the
  * sidebar view and the quick-add command's modal so the dropdown/keyboard
  * logic lives in exactly one place.
  */
@@ -24,13 +24,14 @@ export class QuickAddInput {
 		container: HTMLElement,
 		private getTags: () => SPTag[],
 		private getProjects: () => SPProject[],
+		private getParentTasks: () => SPTask[],
 		private onSubmit: (parsed: ParsedInput, raw: string) => void
 	) {
 		container.addClass("sp-add-row");
 		this.input = container.createEl("input", {
 			type: "text",
 			cls: "sp-add-input",
-			attr: { placeholder: "New task  @today #tag +project 30m" },
+			attr: { placeholder: "New task  @today #tag +project ^parent 30m" },
 		});
 		this.addBtn = container.createEl("button", { text: "+", cls: "sp-add-btn" });
 		this.dropdown = container.createDiv({ cls: "sp-dropdown" });
@@ -57,14 +58,14 @@ export class QuickAddInput {
 	private submit(): void {
 		const raw = this.input.value.trim();
 		if (!raw) return;
-		this.onSubmit(parseInput(raw, this.getTags(), this.getProjects()), raw);
+		this.onSubmit(parseInput(raw, this.getTags(), this.getProjects(), this.getParentTasks()), raw);
 	}
 
 	private currentToken(): TokenMatch | null {
 		const pos = this.input.selectionStart ?? this.input.value.length;
-		const m = this.input.value.slice(0, pos).match(/([@#+])([^\s@#+]*)$/);
+		const m = this.input.value.slice(0, pos).match(/([@#+^])([^\s@#+^]*)$/);
 		if (!m) return null;
-		return { trigger: m[1] as "@" | "#" | "+", partial: m[2].toLowerCase(), start: pos - m[0].length };
+		return { trigger: m[1] as "@" | "#" | "+" | "^", partial: m[2].toLowerCase(), start: pos - m[0].length };
 	}
 
 	private hideDropdown(): void {
@@ -114,6 +115,10 @@ export class QuickAddInput {
 		else if (tok.trigger === "+")
 			items = this.getProjects()
 				.map((p) => p.title)
+				.filter((t) => t.toLowerCase().startsWith(tok.partial));
+		else if (tok.trigger === "^")
+			items = this.getParentTasks()
+				.map((t) => t.title)
 				.filter((t) => t.toLowerCase().startsWith(tok.partial));
 		if (items.length === 0) {
 			this.hideDropdown();

@@ -49,6 +49,27 @@ const projects: SPProject[] = [
 	assertEq(r.title, "Only shortcuts", "parseInput title after stripping known shortcuts");
 }
 
+// --- parseInput ^parentTask (subtasks) ---
+const parentTasks: SPTask[] = [{ id: "pt1", title: "Renovation", isDone: false }];
+{
+	const r = parseInput("Buy paint ^Renovation", tags, projects, parentTasks);
+	assertEq(r.title, "Buy paint", "parseInput ^parent strips the token from the title");
+	assertEq(r.parentId, "pt1", "parseInput ^parent resolves an existing top-level task");
+}
+{
+	// API rejects a subtask create that also carries projectId/tagIds, so a resolved
+	// ^parent clears whatever #tag/+project the same input also specified.
+	const r = parseInput("Buy paint #Prio-High +Household ^Renovation", tags, projects, parentTasks);
+	assertEq(r.parentId, "pt1", "parseInput ^parent still resolves alongside other tokens");
+	assertEq(r.tagIds, [], "parseInput ^parent clears tagIds picked up by the same input");
+	assertEq(r.projectId, null, "parseInput ^parent clears projectId picked up by the same input");
+}
+{
+	const r = parseInput("Something ^doesnotexist", tags, projects, parentTasks);
+	assertEq(r.title, "Something ^doesnotexist", "parseInput leaves unmatched ^parent as literal text");
+	assertEq(r.parentId, null, "parseInput no parentId for unmatched ^parent");
+}
+
 // --- resolveDateKeyword / weekday math ---
 {
 	const today = new Date();

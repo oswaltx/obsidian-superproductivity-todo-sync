@@ -113,6 +113,11 @@
 	padding: 0.15em 0;
 }
 
+.sp-subtask-row {
+	margin-left: 2em;
+	opacity: 0.85;
+}
+
 .sp-task-title {
 	flex: 1;
 	cursor: pointer;

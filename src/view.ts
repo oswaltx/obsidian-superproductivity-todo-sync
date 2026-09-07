@@ -97,12 +97,16 @@ export class SPView extends ItemView {
 			addRow,
 			() => this.tags,
 			() => this.projects,
+			() => this.tasks.filter((t) => !t.parentId),
 			(parsed) => {
 				void this.doAdd(parsed);
 			}
 		);
 
-		root.createDiv({ cls: "sp-hint", text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · 30m/2h" });
+		root.createDiv({
+			cls: "sp-hint",
+			text: "@today/@tomorrow/@monday.../@nextweek · #tag · +project · ^parent task · 30m/2h",
+		});
 
 		const searchInput = root.createEl("input", {
 			type: "search",
@@ -152,12 +156,16 @@ export class SPView extends ItemView {
 		}
 		this.quickAdd.setDisabled(true);
 		try {
-			const body: Partial<SPTask> & { title: string; projectId: string } = {
-				title: parsed.title,
-				projectId: parsed.projectId || "INBOX_PROJECT",
-			};
+			// A subtask create can carry neither projectId nor tagIds - it always
+			// inherits its parent's project and can't have its own tags.
+			const body: Partial<SPTask> & { title: string } = { title: parsed.title };
+			if (parsed.parentId) {
+				body.parentId = parsed.parentId;
+			} else {
+				body.projectId = parsed.projectId || "INBOX_PROJECT";
+				if (parsed.tagIds.length) body.tagIds = parsed.tagIds;
+			}
 			if (parsed.dueDay) body.dueDay = parsed.dueDay;
-			if (parsed.tagIds.length) body.tagIds = parsed.tagIds;
 			if (parsed.timeEstimate) body.timeEstimate = parsed.timeEstimate;
 			const newTask = await this.plugin.api.createTask(body);
 			this.tasks.push(newTask);
@@ -206,26 +214,29 @@ export class SPView extends ItemView {
 		parent.createSpan({ cls: "sp-badge", text });
 	}
 
-	private renderTaskRow(container: HTMLElement, t: SPTask, showDate: boolean): void {
+	private renderTaskRow(container: HTMLElement, t: SPTask, showDate: boolean, isSubtask: boolean): void {
 		const projectTitle = new Map(this.projects.map((p) => [p.id, p.title]));
-		const row = container.createDiv({ cls: "sp-task-row" });
+		const row = container.createDiv({ cls: isSubtask ? "sp-task-row sp-subtask-row" : "sp-task-row" });
 		const checkbox = row.createEl("input", { type: "checkbox" });
-		const rank = prioRank(
-			t,
-			this.priorityTagEntries.map((e) => e.id)
-		);
-		if (rank < this.priorityTagEntries.length) {
-			row.createSpan({
-				cls: "sp-prio-badge",
-				text: String(rank + 1),
-				attr: { title: this.priorityTagEntries[rank].title },
-			});
+		if (!isSubtask) {
+			const rank = prioRank(
+				t,
+				this.priorityTagEntries.map((e) => e.id)
+			);
+			if (rank < this.priorityTagEntries.length) {
+				row.createSpan({
+					cls: "sp-prio-badge",
+					text: String(rank + 1),
+					attr: { title: this.priorityTagEntries[rank].title },
+				});
+			}
 		}
 		this.renderTaskTitle(row, t);
 
 		const meta = row.createDiv({ cls: "sp-task-meta" });
 		this.renderDateBadge(meta, t, showDate);
-		const pTitle = this.selectedProjectId === null && t.projectId ? projectTitle.get(t.projectId) : undefined;
+		const pTitle =
+			!isSubtask && this.selectedProjectId === null && t.projectId ? projectTitle.get(t.projectId) : undefined;
 		if (pTitle) this.badge(meta, pTitle);
 
 		const noteMatch = (t.notes || "").match(/obsidian:\/\/open\?[^)\s]*?file=([^)&\s]+)/);
@@ -392,6 +403,7 @@ export class SPView extends ItemView {
 		const open = this.tasks.filter(
 			(t) =>
 				!t.isDone &&
+				!t.parentId &&
 				(this.selectedProjectId === null || t.projectId === this.selectedProjectId) &&
 				(!this.searchQuery || t.title.toLowerCase().includes(this.searchQuery))
 		);
@@ -450,7 +462,13 @@ export class SPView extends ItemView {
 			this.groupsContainer.createDiv({ cls: "sp-group-empty", text: "none" });
 			return;
 		}
-		for (const t of list) this.renderTaskRow(this.groupsContainer, t, showDate);
+		for (const t of list) {
+			this.renderTaskRow(this.groupsContainer, t, showDate, false);
+			if (t.subTaskIds?.length) {
+				const subtasks = this.tasks.filter((x) => x.parentId === t.id && !x.isDone);
+				for (const sub of subtasks) this.renderTaskRow(this.groupsContainer, sub, false, true);
+			}
+		}
 	}
 
 	private async rescheduleToToday(list: SPTask[], todayStr: string, rescheduleBtn: HTMLButtonElement): Promise<void> {

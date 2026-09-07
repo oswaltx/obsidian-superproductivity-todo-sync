@@ -15,11 +15,18 @@ cloud account, no third-party server.
   project) to filter the whole view down to a single project.
 - A **filter box** to narrow the visible tasks by a title search.
 - Quick-add input with the same `@`/`#`/`+` shortcut syntax as
-  SuperProductivity's own add-task bar, with autocomplete:
+  SuperProductivity's own add-task bar, plus a `^` shortcut of this plugin's
+  own for subtasks, with autocomplete for all of them:
   - `@today`, `@tomorrow`, a weekday name, or `@nextweek` for the due date
   - `#tag` for an existing tag
   - `+project` for an existing project
+  - `^parent task` to create it as a subtask of an existing top-level task
+    (SuperProductivity requires a subtask to inherit its parent's project and
+    forbids it from having its own tags, so any `#tag`/`+project` in the same
+    input is dropped when `^` resolves)
   - `30m` / `2h` for a time estimate
+- Subtasks are shown indented directly under their parent task, wherever the
+  parent falls in the due-date grouping.
 - A **"Quick add task" command** (Command palette → assign your own hotkey
   under Settings → Hotkeys) opens the same quick-add input in a small modal,
   so you can log a task without switching to the sidebar.

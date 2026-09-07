@@ -17,6 +17,10 @@ export interface SPTask {
 	tagIds?: string[];
 	notes?: string;
 	timeEstimate?: number;
+	/** Set on subtasks; references their (always top-level) parent task. */
+	parentId?: string;
+	/** Set on parent tasks; ids of their subtasks. */
+	subTaskIds?: string[];
 }
 
 export interface SPPluginSettings {

@@ -54,21 +54,30 @@ export interface ParsedInput {
 	tagIds: string[];
 	projectId: string | null;
 	timeEstimate: number | null;
+	/** Id of the parent task if a `^parentTitle` token matched an existing top-level task. */
+	parentId: string | null;
 }
 
 /**
- * Parses @date / #tag / +project / Nm|Nh out of raw input text, resolving
- * tags and projects against what actually exists in SuperProductivity (the
- * REST API has no endpoint to create tags on the fly). Anything unrecognized
- * (typo, tag that doesn't exist) is left as literal title text rather than
- * silently dropped.
+ * Parses @date / #tag / +project / ^parentTask / Nm|Nh out of raw input
+ * text, resolving tags, projects and parent tasks against what actually
+ * exists in SuperProductivity (the REST API has no endpoint to create tags
+ * on the fly, and only top-level tasks can be a parent). Anything
+ * unrecognized (typo, tag/task that doesn't exist) is left as literal title
+ * text rather than silently dropped.
+ *
+ * A resolved `^parentTask` clears any tags/project the input also specified:
+ * SuperProductivity's API rejects a subtask create that also carries
+ * projectId or tagIds (a subtask always inherits its parent's project and
+ * can't have its own tags).
  */
-export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): ParsedInput {
+export function parseInput(text: string, tags: SPTag[], projects: SPProject[], parentTasks: SPTask[] = []): ParsedInput {
 	let title = text;
 	let dueDay: string | null = null;
-	const tagIds: string[] = [];
+	let tagIds: string[] = [];
 	let projectId: string | null = null;
 	let timeEstimate: number | null = null;
+	let parentId: string | null = null;
 
 	title = title.replace(/@([A-Za-z]+)/g, (full: string, word: string) => {
 		const resolved = resolveDateKeyword(word.toLowerCase());
@@ -94,11 +103,24 @@ export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): 
 		}
 		return full;
 	});
+	title = title.replace(/\^(\S+)/g, (full: string, word: string) => {
+		const match = parentTasks.find((p) => p.title.toLowerCase() === word.toLowerCase());
+		if (match) {
+			parentId = match.id;
+			return "";
+		}
+		return full;
+	});
 	const timeMatch = title.match(/(?:^|\s)(\d+)(m|h)(?=\s|$)/);
 	if (timeMatch) {
 		const n = parseInt(timeMatch[1], 10);
 		timeEstimate = timeMatch[2] === "h" ? n * 3600000 : n * 60000;
 		title = title.replace(timeMatch[0], "");
+	}
+
+	if (parentId) {
+		tagIds = [];
+		projectId = null;
 	}
 
 	return {
@@ -107,6 +129,7 @@ export function parseInput(text: string, tags: SPTag[], projects: SPProject[]): 
 		tagIds,
 		projectId,
 		timeEstimate,
+		parentId,
 	};
 }
 
